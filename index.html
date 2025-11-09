@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>安全宣言我来录</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/RecordRTC/5.6.2/RecordRTC.min.js"></script>
+  <script src="https://unpkg.com/wavesurfer.js"></script>
+  <style>
+    body {
+  background: 
+    linear-gradient(135deg, #a1c4fd, #c2e9fb), /* 原来的渐变层 */
+    url('icon-record.png'); /* 你的本地贴图文件名 */
+  background-size: 400% 400%, cover; /* 渐变动得更大，贴图铺满 */
+  background-blend-mode: overlay; /* 让贴图和渐变融合 */
+  animation: gradientFlow 8s ease infinite;
+  min-height: 100vh;
+}
+
+@keyframes gradientFlow {
+  0% { background-position: 0% 50%, center; }
+  50% { background-position: 100% 50%, center; }
+  100% { background-position: 0% 50%, center; }
+}
+
+    .declaration {
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    .declaration.selected {
+      color: #fff;
+      background-color: #2563eb;
+      font-weight: bold;
+    }
+    .declaration.disabled {
+      opacity: 0.5;
+    }
+    #recordButton {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: #ef4444;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      user-select: none;
+      transition: transform 0.1s;
+    }
+    #recordButton:active {
+      transform: scale(0.9);
+    }
+  </style>
+</head>
+<body class="flex flex-col items-center justify-center text-center text-gray-800 px-4 py-8 space-y-4">
+
+  <h1 class="text-2xl font-bold mb-4">安全宣言我来录</h1>
+
+  <div id="declarationList" class="flex flex-col space-y-2 w-64">
+    <div class="declaration py-2 px-4 rounded-lg bg-white">有序排队，我先让你</div>
+    <div class="declaration py-2 px-4 rounded-lg bg-white">遵章守纪，保障安全</div>
+    <div class="declaration py-2 px-4 rounded-lg bg-white">安全是生命的基石</div>
+    <div class="declaration py-2 px-4 rounded-lg bg-white">防患未然，重于泰山</div>
+    <div class="declaration py-2 px-4 rounded-lg bg-white">紧急按钮不乱碰</div>
+  </div>
+
+  <div class="mt-6">
+    <div id="recordButton">按住录音</div>
+  </div>
+
+  <div id="waveform" class="w-72 h-20 mt-4"></div>
+
+  <div id="controls" class="hidden mt-4 space-x-4">
+    <button id="playButton" class="px-4 py-2 bg-green-500 text-white rounded-lg">试听</button>
+    <button id="retryButton" class="px-4 py-2 bg-yellow-500 text-white rounded-lg">重录</button>
+    <button id="uploadButton" class="px-4 py-2 bg-blue-500 text-white rounded-lg">上传</button>
+  </div>
+
+  <script>
+    const declarations = document.querySelectorAll('.declaration');
+    let selected = null;
+
+    declarations.forEach(d => {
+      d.addEventListener('click', () => {
+        if (d.classList.contains('selected')) {
+          d.classList.remove('selected');
+          declarations.forEach(x => x.classList.remove('disabled'));
+          selected = null;
+        } else {
+          declarations.forEach(x => {
+            x.classList.remove('selected');
+            x.classList.add('disabled');
+          });
+          d.classList.add('selected');
+          d.classList.remove('disabled');
+          selected = d.innerText;
+        }
+      });
+    });
+
+    let recorder, audioBlob;
+    let wavesurfer = WaveSurfer.create({
+      container: '#waveform',
+      waveColor: '#a5b4fc',
+      progressColor: '#2563eb',
+      height: 60
+    });
+
+    const recordButton = document.getElementById('recordButton');
+    const playButton = document.getElementById('playButton');
+    const retryButton = document.getElementById('retryButton');
+    const uploadButton = document.getElementById('uploadButton');
+    const controls = document.getElementById('controls');
+
+    async function startRecording() {
+      if (!selected) {
+        alert('请先选择一条安全宣言！');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recorder = new RecordRTC(stream, { type: 'audio', mimeType: 'audio/webm' });
+      recorder.startRecording();
+      wavesurfer.empty();
+      recordButton.textContent = '录音中…';
+      recordButton.style.background = '#dc2626';
+    }
+
+    async function stopRecording() {
+      if (!recorder) return;
+      await new Promise(r => recorder.stopRecording(r));
+      audioBlob = recorder.getBlob();
+      const audioURL = URL.createObjectURL(audioBlob);
+      wavesurfer.load(audioURL);
+      recordButton.textContent = '按住录音';
+      recordButton.style.background = '#ef4444';
+      controls.classList.remove('hidden');
+    }
+
+    recordButton.addEventListener('touchstart', e => {
+      e.preventDefault();
+      startRecording();
+    });
+    recordButton.addEventListener('touchend', e => {
+      e.preventDefault();
+      stopRecording();
+    });
+    recordButton.addEventListener('mousedown', startRecording);
+    recordButton.addEventListener('mouseup', stopRecording);
+
+    playButton.onclick = () => {
+      wavesurfer.playPause();
+    };
+
+    retryButton.onclick = () => {
+      audioBlob = null;
+      wavesurfer.empty();
+      controls.classList.add('hidden');
+      declarations.forEach(x => x.classList.remove('disabled', 'selected'));
+      selected = null;
+      alert('请重新选择宣言并录音');
+    };
+
+    uploadButton.onclick = async () => {
+      if (!audioBlob) {
+        alert('请先录音');
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'record.mp3');
+      formData.append('declaration', selected);
+      // 模拟上传
+      setTimeout(() => {
+        alert('上传成功！您的安全宣言会被更多人听到！');
+      }, 1000);
+      // 若未来接后端，可用：
+      // await fetch('/upload', { method: 'POST', body: formData });
+    };
+  </script>
+</body>
+</html>
